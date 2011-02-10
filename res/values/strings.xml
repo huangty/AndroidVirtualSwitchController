@@ -2,4 +2,6 @@
 <resources>
     <string name="hello">Hello World, AndroidVirtualSwitchController!</string>
     <string name="app_name">AVSC</string>
+    <string name="title">Android Virtual Switch Controller</string>
+    <string name="port">Binding Port:</string>
 </resources>

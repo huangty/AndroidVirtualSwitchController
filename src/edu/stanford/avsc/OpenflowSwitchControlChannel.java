@@ -14,15 +14,22 @@ import android.util.Log;
 
 
 public class OpenflowSwitchControlChannel extends Thread{
+	int bindPort;
+	OpenflowSwitchControlChannel(){
+		bindPort = 6633;
+	}
+	OpenflowSwitchControlChannel(int _bindPort){
+		bindPort = _bindPort;
+	}
 	public void run(){		
 		ServerSocket ctlServerSocket = null;
         try {
-        	ctlServerSocket = new ServerSocket(6633);
+        	ctlServerSocket = new ServerSocket(bindPort);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		Log.d("test", "Started the TCP server");
+		Log.d("AVSC", "Started the Controller TCP server, listening on Port " + bindPort);
 		while(true){
 			try{
 				byte[] buf = new byte[2000]; 
@@ -39,8 +46,6 @@ public class OpenflowSwitchControlChannel extends Thread{
 				ofh.writeTo(bb);
 				outToOfd.write(bb.array());
 				Log.d("AVSC:Send", ofh.toString());
-				//String clientSentence = inFromOfd.read
-				//Log.d("test", clientSentence);
 			}catch(IOException e){
 				
 			}
