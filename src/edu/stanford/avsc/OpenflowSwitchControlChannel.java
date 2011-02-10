@@ -12,17 +12,28 @@ import org.openflow.protocol.OFMatch;
 
 import android.util.Log;
 
+/**
+ * The Thread Create and Maintain Connections to Openflowd
+ *
+ * @author Te-Yuan Huang (huangty@stanford.edu)
+ *
+ */
 
 public class OpenflowSwitchControlChannel extends Thread{
 	int bindPort;
+	ServerSocket ctlServerSocket = null;
 	OpenflowSwitchControlChannel(){
 		bindPort = 6633;
 	}
+	/**
+     * Set the port that the controller is going to listen
+     * @param factory
+     */
 	OpenflowSwitchControlChannel(int _bindPort){
 		bindPort = _bindPort;
 	}
 	public void run(){		
-		ServerSocket ctlServerSocket = null;
+		
         try {
         	ctlServerSocket = new ServerSocket(bindPort);
 		} catch (IOException e) {

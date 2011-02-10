@@ -4,4 +4,5 @@
     <string name="app_name">AVSC</string>
     <string name="title">Android Virtual Switch Controller</string>
     <string name="port">Binding Port:</string>
+    <string name="portRangeReminder">Port number can only be with [1024, 65535]</string>
 </resources>
