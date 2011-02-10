@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import org.openflow.protocol.OFHello;
 import org.openflow.protocol.OFMatch;
 
+import android.os.Handler;
 import android.util.Log;
 
 /**
@@ -21,16 +22,19 @@ import android.util.Log;
 
 public class OpenflowSwitchControlChannel extends Thread{
 	int bindPort;
+	Handler mHandler;
 	ServerSocket ctlServerSocket = null;
-	OpenflowSwitchControlChannel(){
+	OpenflowSwitchControlChannel(Handler _mHandler){
 		bindPort = 6633;
+		mHandler = _mHandler;
 	}
 	/**
      * Set the port that the controller is going to listen
      * @param factory
      */
-	OpenflowSwitchControlChannel(int _bindPort){
+	OpenflowSwitchControlChannel(int _bindPort, Handler _mHandler){
 		bindPort = _bindPort;
+		mHandler = _mHandler;
 	}
 	public void run(){		
 		

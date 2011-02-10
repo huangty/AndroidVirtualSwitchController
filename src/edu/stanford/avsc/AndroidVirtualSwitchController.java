@@ -1,18 +1,5 @@
 package edu.stanford.avsc;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.ByteBuffer;
-
-import org.openflow.protocol.OFHello;
-import org.openflow.protocol.OFMatch;
-
-import edu.stanford.avsc.R;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -50,27 +37,25 @@ public class AndroidVirtualSwitchController extends Activity {
     }
     private Button.OnClickListener startOpenflowSwitchControlChannel = new Button.OnClickListener(){
     	public void onClick(View v){
-    		int bindingPort = -1;
+    		int bind_port = -1;
     		try{
-    			bindingPort = Integer.parseInt(field_port.getText().toString());
+    			bind_port = Integer.parseInt(field_port.getText().toString());
     		}catch(Exception e){
     			Toast.makeText(AndroidVirtualSwitchController.this, 
     					R.string.portRangeReminder, Toast.LENGTH_SHORT).show();
     		}
     		
-    		if(bindingPort < 1024 || bindingPort > 65535){
+    		if(bind_port < 1024 || bind_port > 65535){
     			Toast.makeText(AndroidVirtualSwitchController.this, 
     					R.string.portRangeReminder, Toast.LENGTH_SHORT).show();
     		}else{
     			Intent intent = new Intent();
     			intent.setClass(AndroidVirtualSwitchController.this, StatusReport.class);
+    			Bundle bundle = new Bundle();
+    			bundle.putInt("BIND_PORT", bind_port);
+    			intent.putExtras(bundle);
     			startActivity(intent);
-    		}
-    		
-    		/*else{
-    			new OpenflowSwitchControlChannel(bindingPort).start();
-    		}*/
-    		
+    		}    		
     	}
     };
 }
