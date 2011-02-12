@@ -43,25 +43,10 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     /** Holds last value set by a client. */
     int mValue = 0;
 
-    /**
-     * Command to the service to register a client, receiving callbacks
-     * from the service.  The Message's replyTo field must be a Messenger of
-     * the client where callbacks should be sent.
-     */
     static final int MSG_REGISTER_CLIENT = 1;
 
-    /**
-     * Command to the service to unregister a client, ot stop receiving callbacks
-     * from the service.  The Message's replyTo field must be a Messenger of
-     * the client as previously given with MSG_REGISTER_CLIENT.
-     */
     static final int MSG_UNREGISTER_CLIENT = 2;
 
-    /**
-     * Command to service to set a new value.  This can be sent to the
-     * service to supply a new value, and will be sent by the service to
-     * any registered clients with the new value.
-     */
     static final int MSG_SET_VALUE = 3;
     
     static final int MSG_REPORT_UPDATE = 4;
@@ -88,9 +73,6 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
                             mClients.get(i).send(Message.obtain(null,
                                     MSG_SET_VALUE, mValue, 0));
                         } catch (RemoteException e) {
-                            // The client is dead.  Remove it from the list;
-                            // we are going through the list from back to front
-                            // so this is safe to do inside the loop.
                             mClients.remove(i);
                         }
                     }
@@ -98,7 +80,8 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
                 case MSG_START_OPENFLOWD:
                 	bind_port = msg.arg1;
                 	sendReportToUI("Bind on port: " + bind_port);
-                	Log.d("AVSC", "Send msg on bind: " + bind_port);          
+                	Log.d("AVSC", "Send msg on bind: " + bind_port);
+                	startOpenflowD();
                 	
                 default:
                     super.handleMessage(msg);
@@ -128,41 +111,37 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
         Toast.makeText(this, R.string.openflow_channel_stopped, Toast.LENGTH_SHORT).show();
     }
     private void sendReportToUI(String str){
-    	Log.d("AVSC", "size of clients = " + mClients.size() );
+    	//Log.d("AVSC", "size of clients = " + mClients.size() );
     	for (int i=mClients.size()-1; i>=0; i--) {
             try {
             	Message msg = Message.obtain(null, MSG_REPORT_UPDATE);
             	Bundle data = new Bundle();
-            	data.putString("MSG_REPORT_UPDATE", str);
+            	data.putString("MSG_REPORT_UPDATE", str+"\n -------------------------------");
             	msg.setData(data);
                 mClients.get(i).send(msg);
             } catch (RemoteException e) {
-                // The client is dead.  Remove it from the list;
-                // we are going through the list from back to front
-                // so this is safe to do inside the loop.
                 mClients.remove(i);
             }
         }
     }
     
-    private void startOpenflowD(){
-    	OpenflowSwitchControlChannel oscc = new OpenflowSwitchControlChannel();
-    	
+    public void startOpenflowD(){
+    	Log.d("AVSC","starting openflowd on another thread");
+    	new Thread(this).start();    	
     }
     /**
      * Show a notification while this service is running.
      */
     private void showNotification() {
-        // In this sample, we'll use the same text for the ticker and the expanded notification
         CharSequence text = getText(R.string.openflow_channel_started);
 
-        // Set the icon, scrolling text and timestamp
+        // Set the icon, scrolling text and timestamp for notification
         Notification notification = new Notification(R.drawable.icon, text, System.currentTimeMillis());
 
         Intent intent = new Intent(this, StatusReport.class);
-        Bundle bundle = new Bundle();
+        /*Bundle bundle = new Bundle();
 		bundle.putInt("BIND_PORT", bind_port);
-		intent.putExtras(bundle);
+		intent.putExtras(bundle);*/
         // The PendingIntent to launch our activity if the user selects this notification
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, new Intent(this, StatusReport.class), 0);
 
@@ -181,8 +160,8 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
      */
     @Override
     public IBinder onBind(Intent intent) {
-    	Bundle bundle = intent.getExtras();
-    	bind_port = bundle.getInt("BIND_PORT");    	
+    	//Bundle bundle = intent.getExtras();
+    	//bind_port = bundle.getInt("BIND_PORT");    	
         return mMessenger.getBinder();
     }
 
@@ -205,12 +184,13 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 				OFMatch ofm = new OFMatch();
 				short inputPort = (short)ofdSocket.getLocalPort();
 				ofm.loadFromPacket(buf, inputPort);
-				Log.d("AVSC:Receive", ofm.toString());
+				Log.d("AVSC_Receive", ofm.toString());
+				sendReportToUI(ofm.toString());
 				OFHello ofh = new OFHello();
 				ByteBuffer bb = ByteBuffer.allocate(ofh.getLength());
 				ofh.writeTo(bb);
 				outToOfd.write(bb.array());
-				Log.d("AVSC:Send", ofh.toString());
+				Log.d("AVSC_Send", ofh.toString());
 			}catch(IOException e){
 				
 			}

@@ -29,7 +29,7 @@ public class StatusReport extends Activity {
 	private TextView tview_report;
 	private ScrollView sview_report;
 	private int bind_port;
-	private Thread ofd_thread = null;
+	//private Thread ofd_thread = null;
 	private final static int REPORT_RECEIVED = 1;
 	/*
 	 * To show the report on UI 
@@ -64,7 +64,7 @@ public class StatusReport extends Activity {
 	                break;	
 	            case OpenflowSwitchControlChannel.MSG_REPORT_UPDATE:
 	            	//tview_report.setText("Received from service: " + msg.arg1);
-	            	mBuffer.append("Report Update from service: "+ msg.getData().getString("MSG_REPORT_UPDATE")+"\n");
+	            	mBuffer.append(msg.getData().getString("MSG_REPORT_UPDATE")+"\n");
 	                Log.d("AVSC", "Got reprot from openflowd");
 	            	break;	
 	            default:
@@ -108,9 +108,9 @@ public class StatusReport extends Activity {
 	            mService.send(msg);
 	            
 	            // Give it some value as an example.
-	            msg = Message.obtain(null,
+	            /*msg = Message.obtain(null,
 	            		OpenflowSwitchControlChannel.MSG_SET_VALUE, this.hashCode(), 0);
-	            mService.send(msg);
+	            mService.send(msg);*/
 	        } catch (RemoteException e) {
 	            // In this case the service has crashed before we could even
 	            // do anything with it; we can count on soon being
