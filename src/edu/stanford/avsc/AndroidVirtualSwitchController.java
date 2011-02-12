@@ -4,7 +4,6 @@ package edu.stanford.avsc;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -35,6 +34,10 @@ public class AndroidVirtualSwitchController extends Activity {
     private void setListeners(){
     	button_startctl.setOnClickListener(startOpenflowSwitchControlChannel);
     }
+    /**
+     * Check if the port number is within [1024 - 65535]. 
+     * If yes, then start the controller; otherwise, staying in this activity.
+     */
     private Button.OnClickListener startOpenflowSwitchControlChannel = new Button.OnClickListener(){
     	public void onClick(View v){
     		int bind_port = -1;
@@ -49,6 +52,9 @@ public class AndroidVirtualSwitchController extends Activity {
     			Toast.makeText(AndroidVirtualSwitchController.this, 
     					R.string.portRangeReminder, Toast.LENGTH_SHORT).show();
     		}else{
+    			/** 
+    			 * Port number is okay, start the controller
+    			 * */
     			Intent intent = new Intent();
     			intent.setClass(AndroidVirtualSwitchController.this, StatusReport.class);
     			Bundle bundle = new Bundle();
