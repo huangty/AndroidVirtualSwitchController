@@ -3,13 +3,28 @@ package edu.stanford.avsc;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.openflow.protocol.OFFeaturesReply;
+import org.openflow.protocol.OFFlowMod;
 import org.openflow.protocol.OFHello;
 import org.openflow.protocol.OFMatch;
+import org.openflow.protocol.action.OFAction;
+import org.openflow.protocol.action.OFActionOutput;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -34,12 +49,22 @@ import android.widget.Toast;
 
 public class OpenflowSwitchControlChannel extends Service implements Runnable{
 	int bind_port = 6633;
-	ServerSocket ctlServerSocket = null;
-		
+    ServerSocketChannel ctlServer = null; 
+	Selector selector = null; 
+	OFMessageHandler ofm_handler = new OFMessageHandler();
+
+	// A list of PendingChange instances
+	private List pendingChanges = new LinkedList();
+
+	// Maps a SocketChannel to a list of ByteBuffer instances
+	private Map pendingData = new HashMap();
+	public Map switchData = new HashMap<String, OFFeaturesReply>();
+	
 	/** For showing and hiding our notification. */
     NotificationManager mNM;
     /** Keeps track of all current registered clients. */
     ArrayList<Messenger> mClients = new ArrayList<Messenger>();
+    
     /** Holds last value set by a client. */
     int mValue = 0;
 
@@ -53,6 +78,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     
     static final int MSG_START_OPENFLOWD = 5;
 
+    final int BUFFER_SIZE = 8192;
     /**
      * Handler of incoming messages from clients.
      */
@@ -106,11 +132,19 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     public void onDestroy() {
         // Cancel the persistent notification.
         mNM.cancel(R.string.openflow_channel_started);
-
+        //close server socket before leaving the service
+        try{
+	        if(ctlServer != null && ctlServer.isOpen()){
+				ctlServer.socket().close();				
+				ctlServer.close();
+	        }
+        }catch(IOException e){        	
+        }
         // Tell the user we stopped.
         Toast.makeText(this, R.string.openflow_channel_stopped, Toast.LENGTH_SHORT).show();
+        
     }
-    private void sendReportToUI(String str){
+    public void sendReportToUI(String str){
     	//Log.d("AVSC", "size of clients = " + mClients.size() );
     	for (int i=mClients.size()-1; i>=0; i--) {
             try {
@@ -125,8 +159,10 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
         }
     }
     
-    public void startOpenflowD(){
-    	Log.d("AVSC","starting openflowd on another thread");
+    public void startOpenflowD(){    	
+    	Log.d("AVSC", "Started the Controller TCP server, listening on Port " + bind_port);        
+        
+
     	new Thread(this).start();    	
     }
     /**
@@ -138,10 +174,6 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
         // Set the icon, scrolling text and timestamp for notification
         Notification notification = new Notification(R.drawable.icon, text, System.currentTimeMillis());
 
-        Intent intent = new Intent(this, StatusReport.class);
-        /*Bundle bundle = new Bundle();
-		bundle.putInt("BIND_PORT", bind_port);
-		intent.putExtras(bundle);*/
         // The PendingIntent to launch our activity if the user selects this notification
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, new Intent(this, StatusReport.class), 0);
 
@@ -160,46 +192,171 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
      */
     @Override
     public IBinder onBind(Intent intent) {
-    	//Bundle bundle = intent.getExtras();
-    	//bind_port = bundle.getInt("BIND_PORT");    	
         return mMessenger.getBinder();
     }
 
 	@Override
 	public void run() {
-		try {
-        	ctlServerSocket = new ServerSocket(bind_port);
+		try {			
+        	ctlServer = ServerSocketChannel.open();
+    		ctlServer.configureBlocking(false);
+    		ctlServer.socket().bind(new InetSocketAddress(bind_port));
+    		selector = Selector.open();
+	        SelectionKey sk = ctlServer.register(selector, SelectionKey.OP_ACCEPT);	        
+	        new Thread(ofm_handler).start();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
+			
+			e.printStackTrace();
+			
+		}
+		
+    	Log.d("AVSC","starting openflowd on another thread");
+    	ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+    	try{
+    		while (!Thread.interrupted()) {
+    			
+    			synchronized (this.pendingChanges) {
+					Iterator changes = this.pendingChanges.iterator();
+					while (changes.hasNext()) {
+						NIOChangeRequest change = (NIOChangeRequest) changes.next();
+						switch (change.type) {
+						case NIOChangeRequest.CHANGEOPS:
+							SelectionKey key = change.socket.keyFor(this.selector);
+							key.interestOps(change.ops);
+						}
+					}
+					this.pendingChanges.clear();
+				}
+    			/*if(selector == null){
+    				
+    			}*/
+    			int num = selector.select();
+    			Set selectedKeys = selector.selectedKeys();
+    			Iterator it = selectedKeys.iterator();
+    			while(it.hasNext()){
+    				SelectionKey key = (SelectionKey) it.next();
+    				it.remove();
+    				if( ! key.isValid() ){
+    					continue;
+    				}else if( key.isAcceptable() ){
+    					//handle new connection
+    					ServerSocketChannel scc = (ServerSocketChannel) key.channel();
+    					SocketChannel sc = scc.accept();
+    					sc.configureBlocking(false);
+    					SelectionKey newKey = sc.register(selector, SelectionKey.OP_READ);
+    					sendReportToUI("Accpet New Connection");
+    					Log.d("AVSC", "accept new connection");
+    				}else if(key.isReadable()){
+    					//handle message from switch/remote host
+    					read(key, readBuffer);   					    					
+    				}else if(key.isWritable()){
+    					write(key);
+    				}
+    			}    			
+    		}
+    	}catch (IOException e) {
 			e.printStackTrace();
 		}
-		Log.d("AVSC", "Started the Controller TCP server, listening on Port " + bind_port);
-		while(true){
-			try{
-				byte[] buf = new byte[2000]; 
-				Socket ofdSocket = ctlServerSocket.accept();
-				InputStream inFromOfd = ofdSocket.getInputStream();
-				OutputStream outToOfd = ofdSocket.getOutputStream();
-				inFromOfd.read(buf);
-				OFMatch ofm = new OFMatch();
-				short inputPort = (short)ofdSocket.getLocalPort();
-				ofm.loadFromPacket(buf, inputPort);
-				Log.d("AVSC_Receive", ofm.toString());
-				sendReportToUI(ofm.toString());
-				OFHello ofh = new OFHello();
-				ByteBuffer bb = ByteBuffer.allocate(ofh.getLength());
-				ofh.writeTo(bb);
-				outToOfd.write(bb.array());
-				Log.d("AVSC_Send", ofh.toString());
-			}catch(IOException e){
-				
+	}	  
+	private void read(SelectionKey key, ByteBuffer readBuffer) throws IOException {
+		SocketChannel sc = (SocketChannel) key.channel();
+		readBuffer.clear();
+		int numRead = -1;
+		try {
+			numRead = sc.read(readBuffer);
+		} catch (IOException e) {
+			key.cancel();
+			sc.close();
+			return;
+		}
+		if (numRead == -1) {
+			key.channel().close();
+			key.cancel();
+			return;
+		}
+		// Hand the data off to OFMessage Handler
+		this.ofm_handler.processData(this, sc, readBuffer.array(), numRead);
+	}
+	private void write(SelectionKey key) throws IOException {
+		SocketChannel socketChannel = (SocketChannel) key.channel();
+
+		synchronized (this.pendingData) {
+			List queue = (List) this.pendingData.get(socketChannel);
+
+			// Write until there's not more data ...
+			while (!queue.isEmpty()) {
+				ByteBuffer buf = (ByteBuffer) queue.get(0);
+				socketChannel.write(buf);
+				if (buf.remaining() > 0) {
+					// ... or the socket's buffer fills up
+					break;
+				}
+				queue.remove(0);
+			}
+
+			if (queue.isEmpty()) {
+				// We wrote away all data, so we're no longer interested
+				// in writing on this socket. Switch back to waiting for
+				// data.
+				key.interestOps(SelectionKey.OP_READ);
 			}
 		}
 	}
+	public void send(SocketChannel socket, byte[] data) {
+		synchronized (this.pendingChanges) {
+			// Indicate we want the interest ops set changed
+			this.pendingChanges.add(new NIOChangeRequest(socket, NIOChangeRequest.CHANGEOPS, SelectionKey.OP_WRITE));
 
-    
-	/*public void run(){
-        
-	}*/
+			// And queue the data we want written
+			synchronized (this.pendingData) {
+				List queue = (List) this.pendingData.get(socket);
+				if (queue == null) {
+					queue = new ArrayList();
+					this.pendingData.put(socket, queue);
+				}
+				
+				queue.add(ByteBuffer.wrap(data));
+				Log.d("AVSC", "wrap data = " + data);
+			}
+		}
+		// Finally, wake up our selecting thread so it can make the required changes
+		this.selector.wakeup();
+	}
+	
+	public void insertFixRule(SocketChannel socket){
+		sendReportToUI("Insert Fix Rule");
+		/*OFFlowMod ofmod = new OFFlowMod();
+		OFMatch match = new OFMatch();
+		ofmod.setMatch(match);
+		match.setInputPort((short)1);		
+		OFActionOutput ofa = new OFActionOutput((short)0, (short)32767);
+		List<OFAction> ofal = new LinkedList<OFAction>();
+		ofmod.setActions(ofal);
+		ofal.add(ofa);
+		ByteBuffer bb = ByteBuffer.allocate(8192);
+		ofmod.writeTo(bb);
+		Log.d("AVSC", "ofmod = "+ofmod.toString());
+		send(socket, bb.array());*/
+		
+		/*ofmod = new OFFlowMod();
+		match = new OFMatch();	
+		match.setInputPort((short)0);
+		ofmod.setMatch(match);
+		ofa = new OFActionOutput((short)1, (short)32767);
+		ofal = new LinkedList<OFAction>();
+		ofal.add(ofa);
+		ofmod.setActions(ofal);
+		bb = ByteBuffer.allocate(8192);
+		ofmod.writeTo(bb);*/
+		
+		/*Iterator it = switchData.values().iterator();
+		while(it.hasNext()){
+			OFFeaturesReply offr = (OFFeaturesReply) it.next();
+			int portSize = offr.getPorts().size();
+			
+		}*/
+	}
 
 }

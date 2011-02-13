@@ -38,7 +38,7 @@ public class StatusReport extends Activity {
 		public void handleMessage(Message msg){
 			switch(msg.what){
 				case REPORT_RECEIVED:
-					mBuffer.append(msg.getData()+"\n");
+					mBuffer.append(msg.getData().getString("REPORT")+"\n");
 	                break;
 	            default:
 	                super.handleMessage(msg);
@@ -127,7 +127,12 @@ public class StatusReport extends Activity {
 	        // This is called when the connection with the service has been
 	        // unexpectedly disconnected -- that is, its process crashed.
 	        mService = null;
-	        tview_report.setText("Disconnected.");
+	        Message msg = Message.obtain(null, REPORT_RECEIVED);
+	        Bundle data = new Bundle();
+        	data.putString("REPORT", "Service Disconnected.");
+        	msg.setData(data);            
+            mHandler.sendMessage(msg);
+	        //tview_report.setText("Disconnected.");
 
 	        // As part of the sample, tell the user what happened.
 	        Toast.makeText(StatusReport.this, R.string.openflow_channel_stopped,
