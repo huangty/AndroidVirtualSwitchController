@@ -65,7 +65,7 @@ public class StatusReport extends Activity {
 	            case OpenflowSwitchControlChannel.MSG_REPORT_UPDATE:
 	            	//tview_report.setText("Received from service: " + msg.arg1);
 	            	mBuffer.append(msg.getData().getString("MSG_REPORT_UPDATE")+"\n");
-	                Log.d("AVSC", "Got reprot from openflowd");
+	                //Log.d("AVSC", "Got reprot from openflowd");
 	            	break;	
 	            default:
 	                super.handleMessage(msg);

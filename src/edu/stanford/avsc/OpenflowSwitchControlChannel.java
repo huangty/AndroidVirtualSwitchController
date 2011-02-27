@@ -12,6 +12,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -23,8 +24,17 @@ import org.openflow.protocol.OFFeaturesReply;
 import org.openflow.protocol.OFFlowMod;
 import org.openflow.protocol.OFHello;
 import org.openflow.protocol.OFMatch;
+import org.openflow.protocol.OFMessage;
+import org.openflow.protocol.OFPort;
+import org.openflow.protocol.OFType;
 import org.openflow.protocol.action.OFAction;
 import org.openflow.protocol.action.OFActionOutput;
+import org.openflow.protocol.action.OFActionType;
+import org.openflow.protocol.factory.BasicFactory;
+import org.openflow.protocol.factory.OFActionFactory;
+import org.openflow.protocol.factory.OFMessageFactory;
+import org.openflow.util.U16;
+import org.openflow.util.U32;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -52,6 +62,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     ServerSocketChannel ctlServer = null; 
 	Selector selector = null; 
 	OFMessageHandler ofm_handler = new OFMessageHandler();
+	//OpenflowDaemon openflowd = null;
 
 	// A list of PendingChange instances
 	private List pendingChanges = new LinkedList();
@@ -107,8 +118,9 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
                 	bind_port = msg.arg1;
                 	sendReportToUI("Bind on port: " + bind_port);
                 	Log.d("AVSC", "Send msg on bind: " + bind_port);
+                	//openflowd = new OpenflowDaemon(bind_port);
                 	startOpenflowD();
-                	
+                	break;
                 default:
                     super.handleMessage(msg);
             }
@@ -160,10 +172,8 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     }
     
     public void startOpenflowD(){    	
-    	Log.d("AVSC", "Started the Controller TCP server, listening on Port " + bind_port);        
-        
-
-    	new Thread(this).start();    	
+    	new Thread(this).start();
+    	sendReportToUI("Start Controller Daemon");    	
     }
     /**
      * Show a notification while this service is running.
@@ -197,21 +207,21 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 
 	@Override
 	public void run() {
-		try {			
+		try {
         	ctlServer = ServerSocketChannel.open();
     		ctlServer.configureBlocking(false);
     		ctlServer.socket().bind(new InetSocketAddress(bind_port));
     		selector = Selector.open();
 	        SelectionKey sk = ctlServer.register(selector, SelectionKey.OP_ACCEPT);	        
 	        new Thread(ofm_handler).start();
+	    	Log.d("AVSC", "Started the Controller TCP server, listening on Port " + bind_port); 
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			
+			// TODO Auto-generated catch block			
 			e.printStackTrace();
 			
 		}
 		
-    	Log.d("AVSC","starting openflowd on another thread");
+    	Log.d("AVSC","starting controller on a seperated thread");
     	ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
 
     	try{
@@ -242,6 +252,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
     					continue;
     				}else if( key.isAcceptable() ){
     					//handle new connection
+    			    	Log.d("AVSC","got a new connection");
     					ServerSocketChannel scc = (ServerSocketChannel) key.channel();
     					SocketChannel sc = scc.accept();
     					sc.configureBlocking(false);
@@ -323,40 +334,69 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 		}
 		// Finally, wake up our selecting thread so it can make the required changes
 		this.selector.wakeup();
+		
 	}
 	
-	public void insertFixRule(SocketChannel socket){
+	public void insertFixRule(SocketChannel socket){		
 		sendReportToUI("Insert Fix Rule");
-		/*OFFlowMod ofmod = new OFFlowMod();
-		OFMatch match = new OFMatch();
-		ofmod.setMatch(match);
-		match.setInputPort((short)1);		
-		OFActionOutput ofa = new OFActionOutput((short)0, (short)32767);
-		List<OFAction> ofal = new LinkedList<OFAction>();
-		ofmod.setActions(ofal);
-		ofal.add(ofa);
-		ByteBuffer bb = ByteBuffer.allocate(8192);
-		ofmod.writeTo(bb);
-		Log.d("AVSC", "ofmod = "+ofmod.toString());
-		send(socket, bb.array());*/
+		OFMessageFactory messageFactory = new BasicFactory();
+		OFActionFactory actionFactory = new BasicFactory();
 		
-		/*ofmod = new OFFlowMod();
-		match = new OFMatch();	
-		match.setInputPort((short)0);
-		ofmod.setMatch(match);
-		ofa = new OFActionOutput((short)1, (short)32767);
-		ofal = new LinkedList<OFAction>();
-		ofal.add(ofa);
-		ofmod.setActions(ofal);
-		bb = ByteBuffer.allocate(8192);
-		ofmod.writeTo(bb);*/
+		/*1->2*/        
+		OFMatch match = new OFMatch();        
+        match.setWildcards(OFMatch.OFPFW_ALL & ~OFMatch.OFPFW_IN_PORT);
+        match.setInputPort((short)1);
+        Log.d("AVSC", match.toString());
+        
+        // build action
+        OFActionOutput action = new OFActionOutput()
+            .setPort((short)2);
+        // build flow mod
+        OFFlowMod fm = (OFFlowMod) messageFactory
+                .getMessage(OFType.FLOW_MOD);
+        fm.setBufferId(U32.t(-1))
+            .setIdleTimeout((short) 0)
+            .setHardTimeout((short) 0)
+            .setOutPort((short) OFPort.OFPP_NONE.getValue())
+            .setCommand(OFFlowMod.OFPFC_ADD)
+            .setMatch(match)            
+            .setActions(Collections.singletonList((OFAction)action))
+            .setLength(U16.t(OFFlowMod.MINIMUM_LENGTH+OFActionOutput.MINIMUM_LENGTH));
+        //fm.getMatch().setInputPort((short)1); 
+		ByteBuffer bb = ByteBuffer.allocate(fm.getLength());
+		bb.clear();
+		fm.writeTo(bb);
+		bb.flip();
+		send(socket, bb.array());
+		sendReportToUI("Send Flow Messgage 1->2: " + fm.toString());
+		Log.d("AVSC", fm.toString());
+		/*2->1*/
+		OFMatch match2 = new OFMatch();
 		
-		/*Iterator it = switchData.values().iterator();
-		while(it.hasNext()){
-			OFFeaturesReply offr = (OFFeaturesReply) it.next();
-			int portSize = offr.getPorts().size();
-			
-		}*/
+        match2.setWildcards(OFMatch.OFPFW_ALL & ~OFMatch.OFPFW_IN_PORT);
+        match2.setInputPort((short)2);
+        Log.d("AVSC", match2.toString());
+        // build action
+        OFAction action2 = new OFActionOutput()
+            .setPort((short)1);
+        // build flow mod
+        OFFlowMod fm2 = (OFFlowMod) messageFactory
+                .getMessage(OFType.FLOW_MOD);
+        fm2.setBufferId(U32.t(-1))
+            .setIdleTimeout((short) 0)
+            .setHardTimeout((short) 0)
+            .setOutPort((short) OFPort.OFPP_NONE.getValue())
+            .setCommand(OFFlowMod.OFPFC_ADD)
+            .setMatch(match2)
+            .setActions(Collections.singletonList((OFAction)action2))
+            .setLength(U16.t(OFFlowMod.MINIMUM_LENGTH+OFActionOutput.MINIMUM_LENGTH));        
+		ByteBuffer bb2 = ByteBuffer.allocate(fm2.getLength());
+		bb2.clear();
+		fm2.writeTo(bb2);
+		bb2.flip();
+		send(socket, bb2.array());
+		sendReportToUI("Send Flow Messgage 2->1: " + fm2.toString());
+		Log.d("AVSC", fm2.toString());		
 	}
 
 }
