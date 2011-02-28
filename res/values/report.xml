@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="report_title">Controller Status Report</string>
+    <string name="openflow_channel_started">Openflow Switch Control Channel Started</string>
+    <string name="openflow_channel_stopped">Openflow Switch Control Channel Stopped</string>
 </resources>
