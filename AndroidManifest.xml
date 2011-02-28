@@ -19,12 +19,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name="StatusReport"
+        <activity android:name=".StatusReport"
         		  android:label="@string/report_title"
                   android:configChanges="keyboardHidden|orientation"
                   android:screenOrientation="portrait"
+                  android:launchMode="singleTask"
         		  >
+        	<intent-filter>
+                <!-- <action android:name="android.intent.action.MAIN" /> -->
+                <!-- <category android:name="android.intent.category.LAUNCHER" />-->
+            </intent-filter>
         </activity>
-
+		<service android:name="OpenflowSwitchControlChannel"
+        		 android:process=":ofcc" />
     </application>
 </manifest>
