@@ -33,6 +33,7 @@ import org.openflow.protocol.action.OFActionType;
 import org.openflow.protocol.factory.BasicFactory;
 import org.openflow.protocol.factory.OFActionFactory;
 import org.openflow.protocol.factory.OFMessageFactory;
+import org.openflow.util.HexString;
 import org.openflow.util.U16;
 import org.openflow.util.U32;
 
@@ -329,7 +330,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 				}
 				
 				queue.add(ByteBuffer.wrap(data));
-				Log.d("AVSC", "wrap data = " + data);
+				Log.d("AVSC", "wrap data = " + HexString.toHexString(data));
 			}
 		}
 		// Finally, wake up our selecting thread so it can make the required changes
@@ -343,7 +344,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 		OFActionFactory actionFactory = new BasicFactory();
 		
 		/*1->2*/        
-		OFMatch match = new OFMatch();        
+		/*OFMatch match = new OFMatch();        
         match.setWildcards(OFMatch.OFPFW_ALL & ~OFMatch.OFPFW_IN_PORT);
         match.setInputPort((short)1);
         Log.d("AVSC", match.toString());
@@ -369,9 +370,9 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 		bb.flip();
 		send(socket, bb.array());
 		sendReportToUI("Send Flow Messgage 1->2: " + fm.toString());
-		Log.d("AVSC", fm.toString());
+		Log.d("AVSC", fm.toString());*/
 		/*2->1*/
-		OFMatch match2 = new OFMatch();
+		/*OFMatch match2 = new OFMatch();
 		
         match2.setWildcards(OFMatch.OFPFW_ALL & ~OFMatch.OFPFW_IN_PORT);
         match2.setInputPort((short)2);
@@ -396,7 +397,7 @@ public class OpenflowSwitchControlChannel extends Service implements Runnable{
 		bb2.flip();
 		send(socket, bb2.array());
 		sendReportToUI("Send Flow Messgage 2->1: " + fm2.toString());
-		Log.d("AVSC", fm2.toString());		
+		Log.d("AVSC", fm2.toString());		*/
 	}
 
 }
